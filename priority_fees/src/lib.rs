@@ -184,7 +184,7 @@ mod tests {
 	use super::*;
 
 	use solana_client::nonblocking::rpc_client::RpcClient;
-	use solana_sdk::commitment_config::CommitmentConfig;
+	use solana_commitment_config::CommitmentConfig;
 
 	#[tokio::test]
 	async fn test_procedure_local() {

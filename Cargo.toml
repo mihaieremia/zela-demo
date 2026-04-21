@@ -7,9 +7,6 @@ zela-std = { git = "https://github.com/mihaieremia/zela-std.git", branch = "feat
 serde = { version = "1.0.228", features = ["derive"] }
 log = { version = "0.4" }
 
-# Wasm guests benefit a lot from size-optimized release builds. The Zela host
-# caches compiled objects; a smaller procedure means faster cold starts and
-# less cache pressure. These settings compound with zela-std's `--no-default-features`.
 [profile.release]
 opt-level = "z"
 lto = true
