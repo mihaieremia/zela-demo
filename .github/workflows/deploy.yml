@@ -1,0 +1,23 @@
+name: Deploy procedure to Zela
+
+on:
+  workflow_dispatch:
+    inputs:
+      procedure:
+        description: "Which procedure to deploy"
+        required: true
+        type: choice
+        options:
+          - hello_world
+          - block_time
+          - priority_fees
+
+jobs:
+  deploy:
+    uses: mihaieremia/zela-deployment/.github/workflows/build-and-deploy.yml@v1
+    with:
+      procedure: ${{ inputs.procedure }}
+      project:   ${{ vars.ZELA_PROJECT }}
+    secrets:
+      key-id:     ${{ vars.ZELA_KEY_ID }}
+      key-secret: ${{ secrets.ZELA_KEY_SECRET }}

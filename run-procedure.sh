@@ -7,7 +7,8 @@ PROCEDURE="${1}"
 PARAMS="${2}"
 
 usage() {
-	echo "usage: ZELA_PROJECT_KEY_ID=key_id ZELA_PROJECT_KEY_SECRET=key_secret run-procedure.sh procedure#revision '{ \"json\": \"params\" }'"
+	echo "usage: ZELA_PROJECT_KEY_ID=key_id ZELA_PROJECT_KEY_SECRET=key_secret run-procedure.sh procedure#<git-sha> '{ \"json\": \"params\" }'"
+	echo "  <git-sha> is the full SHA1 commit hash from the build row in the dashboard."
 }
 
 if [ -z "$PROCEDURE" ] || [ -z "$PARAMS" ] || [ -z "$KEY_CLIENT_ID" ] || [ -z "$KEY_SECRET" ]; then

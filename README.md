@@ -127,3 +127,38 @@ The procedure supports two input modes — you must pass **exactly one** of them
 > **Note:** Priority fee = total fee − base fee (5000 lamports). Transactions with a fee below the base fee are skipped with an error log.
 
 ---
+
+## Build profile
+
+All three procedures use the size-optimized release profile defined at the
+workspace root. Cargo does not propagate `[profile.*]` from dependencies, so
+this must live in the procedure workspace's own `Cargo.toml`:
+
+```toml
+[profile.release]
+opt-level = "z"       # optimize for size
+lto = true            # link-time optimization
+codegen-units = 1     # single codegen unit → better inlining, smaller output
+strip = true          # strip debug + symbol tables
+panic = "abort"       # no unwind tables (procedures can't recover from panic anyway)
+```
+
+---
+
+## Continuous deployment
+
+Procedures are built and uploaded to Zela via the reusable workflow at
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), which delegates
+to [`mihaieremia/zela-deployment`](https://github.com/mihaieremia/zela-deployment).
+Trigger it from the **Actions** tab with the procedure name and the workflow
+will build, upload, and register a new revision on the Zela dashboard.
+
+Required repository configuration (Settings → Secrets and variables → Actions):
+
+| Type | Name | Value |
+|---|---|---|
+| Variable | `ZELA_PROJECT` | Zela project UUID from the dashboard |
+| Variable | `ZELA_KEY_ID` | Project key ID |
+| Secret | `ZELA_KEY_SECRET` | Matching project key secret |
+
+---

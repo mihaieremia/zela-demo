@@ -11,11 +11,16 @@ zela-std.workspace = true
 serde.workspace = true
 log.workspace = true
 
-solana-sdk = { version = "2.2" }
-solana-transaction-status-client-types = { version = "2" }
+# Match zela-std's pinned version (=3.1.12). Using `^3.1.12` here would let cargo
+# pick `3.1.13`, which causes two copies of the crate and `EncodedTransaction`
+# type mismatches at the guest/host boundary.
+solana-transaction-status-client-types = "=3.1.12"
 
+# Native-only deps (for `cargo test`). Procedures don't need solana-sdk inside
+# the wasm build — zela-std already provides `RpcClient`.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-solana-client = { version = "2.2" }
+solana-client = "2.2"
+solana-sdk = "2.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
