@@ -11,12 +11,33 @@ on:
           - hello_world
           - block_time
           - priority_fees
+  push:
+    branches:
+      - feat/zela-std-v2
 
 jobs:
-  deploy:
+  # Manual run: deploy the procedure picked from the dropdown.
+  manual:
+    if: github.event_name == 'workflow_dispatch'
     uses: mihaieremia/zela-deployment/.github/workflows/build-and-deploy.yml@v1
     with:
       procedure: ${{ inputs.procedure }}
+      project:   ${{ vars.ZELA_PROJECT }}
+    secrets:
+      key-id:     ${{ vars.ZELA_KEY_ID }}
+      key-secret: ${{ secrets.ZELA_KEY_SECRET }}
+
+  # Push to feat/zela-std-v2: deploy all three procedures in parallel.
+  # `fail-fast: false` lets the other procedures still deploy if one fails.
+  auto:
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        procedure: [hello_world, block_time, priority_fees]
+    uses: mihaieremia/zela-deployment/.github/workflows/build-and-deploy.yml@v1
+    with:
+      procedure: ${{ matrix.procedure }}
       project:   ${{ vars.ZELA_PROJECT }}
     secrets:
       key-id:     ${{ vars.ZELA_KEY_ID }}
