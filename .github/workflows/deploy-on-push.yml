@@ -1,0 +1,23 @@
+name: Deploy all procedures (push)
+
+# Auto-deploys every procedure in parallel on each push to feat/zela-std-v2.
+# `fail-fast: false` so a broken procedure doesn't block the others.
+
+on:
+  push:
+    branches:
+      - feat/zela-std-v2
+
+jobs:
+  deploy:
+    strategy:
+      fail-fast: false
+      matrix:
+        procedure: [hello_world, block_time, priority_fees]
+    uses: mihaieremia/zela-deployment/.github/workflows/build-and-deploy.yml@v1
+    with:
+      procedure: ${{ matrix.procedure }}
+      project:   ${{ vars.ZELA_PROJECT }}
+    secrets:
+      key-id:     ${{ vars.ZELA_KEY_ID }}
+      key-secret: ${{ secrets.ZELA_KEY_SECRET }}
