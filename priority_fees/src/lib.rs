@@ -40,6 +40,9 @@ impl PriorityFees {
 	const BASE_FEE: u64 = 5000;
 	const VOTE_ACCOUNT: &'static str = "Vote111111111111111111111111111111111111111";
 
+	/// Number of times we'll widen the lookback window before giving up.
+	const MAX_LOOKBACK_ATTEMPTS: usize = 8;
+
 	/// Selects blocks according to input and returns their slot numbers.
 	async fn select_blocks(p: Input, rpc: &RpcClient) -> Result<impl Iterator<Item = u64>, String> {
 		let block_count = match p {
@@ -47,25 +50,54 @@ impl PriorityFees {
 			Input::Specific { blocks } => return Ok(blocks.into_iter().skip(0)),
 			Input::Latest { block_count } => block_count,
 		};
+		if block_count == 0 {
+			return Ok(Vec::<u64>::new().into_iter().skip(0));
+		}
 
 		// start off with some latest slot number - it doesn't need to be the absolute latest,
 		// just needs to be close (at our commitment level)
 		let latest_slot = rpc.get_slot().await.map_err(|e| e.to_string())?;
 
-		// find slot numbers of lastest block_count blocks
+		// Estimated lookback window with a 10% margin for skipped slots.
+		let window = (block_count + block_count / Self::BLOCK_COUNT_SLOT_MARGIN_DIV + 1) as u64;
+		let mut start_slot = latest_slot.saturating_sub(window);
+
+		// Find slot numbers of latest block_count blocks. The previous version
+		// looped on the SAME start_slot when too few finalized blocks came back,
+		// retrying the same RPC indefinitely. Now we widen the window backwards
+		// each attempt and bail after MAX_LOOKBACK_ATTEMPTS so a degraded chain
+		// cannot wedge the procedure.
 		let mut block_slots = Vec::<u64>::new();
-		while block_slots.len() < block_count {
-			// we compute an approximate start slot to start the listing at
-			// we don't know how many slots were skipped, so we estimate with respect to block_count
-			let start_slot = latest_slot.saturating_sub(
-				(block_count + block_count / Self::BLOCK_COUNT_SLOT_MARGIN_DIV + 1) as u64
-			);
+		for attempt in 0..Self::MAX_LOOKBACK_ATTEMPTS {
 			block_slots = rpc.get_blocks_with_commitment(
 				start_slot,
 				None,
 				rpc.commitment()
 			).await.map_err(|e| e.to_string())?;
-			log::trace!("get_blocks({start_slot}..) = {}", block_slots.len());
+			log::trace!(
+				"get_blocks({start_slot}..) attempt={attempt} got={}",
+				block_slots.len()
+			);
+			if block_slots.len() >= block_count {
+				break;
+			}
+			if start_slot == 0 {
+				return Err(format!(
+					"only {} block(s) available back to genesis, need {}",
+					block_slots.len(),
+					block_count
+				));
+			}
+			// Widen the lookback by another full window.
+			start_slot = start_slot.saturating_sub(window);
+		}
+		if block_slots.len() < block_count {
+			return Err(format!(
+				"could not collect {} block(s) within {} attempts (got {})",
+				block_count,
+				Self::MAX_LOOKBACK_ATTEMPTS,
+				block_slots.len()
+			));
 		}
 		log::info!("Got {} latest blocks: {:?}", block_slots.len(), block_slots);
 
@@ -139,11 +171,23 @@ impl PriorityFees {
 			}
 		}
 
+		// Guard against div-by-zero: nonvote_count == 0 happens for
+		// `Input::Latest { block_count: 0 }`, blocks containing only vote txs,
+		// or blocks where every tx was skipped due to missing meta. Returning 0
+		// is the pragmatic choice — the procedure response contract has no
+		// "no data" variant, and total_transactions/vote_transactions already
+		// communicate that the sample was empty of qualifying txs.
+		let average_priority_fee_lamports = if nonvote_count == 0 {
+			0
+		} else {
+			total_fees / (nonvote_count as u64)
+		};
+
 		Ok(Output {
 			total_transactions: total_count,
 			vote_transactions: total_count - nonvote_count,
 			latest_block,
-			average_priority_fee_lamports: total_fees / (nonvote_count as u64),
+			average_priority_fee_lamports,
 		})
 	}
 }
