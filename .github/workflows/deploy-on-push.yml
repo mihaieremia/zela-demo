@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        procedure: [hello_world, block_time, priority_fees]
+        procedure: [hello_world, block_time, priority_fees, subscribe]
     uses: mihaieremia/zela-deployment/.github/workflows/build-and-deploy.yml@v1
     with:
       procedure: ${{ matrix.procedure }}
