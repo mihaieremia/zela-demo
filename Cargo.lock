@@ -6229,7 +6229,7 @@ dependencies = [
 [[package]]
 name = "zela-std"
 version = "0.2.0"
-source = "git+https://github.com/mihaieremia/zela-std.git?branch=feat%2Fcleanup-build-optimizations#ef3b92158fd0db29684f089c7129c6b3d2a9cd53"
+source = "git+https://github.com/mihaieremia/zela-std.git?branch=feat%2Fcleanup-build-optimizations#8d30b4e5ed1e00f2eda3ce813755e29f573e99ba"
 dependencies = [
  "base64 0.22.1",
  "bincode",
