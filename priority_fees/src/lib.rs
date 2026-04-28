@@ -44,14 +44,13 @@ impl PriorityFees {
 	const MAX_LOOKBACK_ATTEMPTS: usize = 8;
 
 	/// Selects blocks according to input and returns their slot numbers.
-	async fn select_blocks(p: Input, rpc: &RpcClient) -> Result<impl Iterator<Item = u64>, String> {
+	async fn select_blocks(p: Input, rpc: &RpcClient) -> Result<Vec<u64>, String> {
 		let block_count = match p {
-			// we apply skip here to match the types
-			Input::Specific { blocks } => return Ok(blocks.into_iter().skip(0)),
+			Input::Specific { blocks } => return Ok(blocks),
 			Input::Latest { block_count } => block_count,
 		};
 		if block_count == 0 {
-			return Ok(Vec::<u64>::new().into_iter().skip(0));
+			return Ok(Vec::new());
 		}
 
 		// start off with some latest slot number - it doesn't need to be the absolute latest,
@@ -103,7 +102,7 @@ impl PriorityFees {
 
 		let to_skip = block_slots.len() - block_count;
 
-		Ok(block_slots.into_iter().skip(to_skip))
+		Ok(block_slots.split_off(to_skip))
 	}
 
 	pub async fn run(p: Input, rpc: &RpcClient) -> Result<Output, String> {
