@@ -1,34 +1,39 @@
-# Static IPv4 CIDR -> country/ASN table consumed by build.rs.
-# Columns (TAB-separated): cidr<TAB>country_iso2<TAB>asn
+# IPv4 CIDR -> Zela region mapping consumed by build.rs.
+# Columns (TAB-separated): cidr<TAB>region
+# region must be exactly one of: Frankfurt | Dubai | NewYork | Tokyo
 #
-# Bootstrap procedure (run offline; commit the result):
-#   1. Download MaxMind GeoLite2-Country + GeoLite2-ASN CSVs (or db-ip.com lite).
-#   2. Filter to the union of /16 supernets observed in `getClusterNodes` over
-#      a few epochs — typical Solana validator hosters: Hetzner, OVH, Latitude,
-#      AWS, GCE, Teraswitch, Coinbase Cloud.
-#   3. Emit (network/prefix, country_iso2, asn). Keep ranges disjoint —
-#      build.rs panics on overlap.
-#   4. Sort by start address for review-friendly diffs (build.rs re-sorts).
+# Deterministic continental rule (apply offline at bootstrap, then encode the
+# result here — runtime never sees country codes):
+#   Americas (NA + SA) ............................ NewYork
+#   Europe + North/West Africa .................... Frankfurt
+#   Middle East + South Asia + East/South Africa .. Dubai
+#   East Asia + SE Asia + Oceania ................. Tokyo
 #
-# Seed entries below cover a handful of large hosters used by mainnet
-# validators today. Extend as needed.
-24.144.64.0/19	US	14061	# DigitalOcean - NYC
-46.4.0.0/16	DE	24940	# Hetzner - Falkenstein/Nuremberg
-51.81.0.0/16	US	16276	# OVH - Hillsboro
-51.89.0.0/16	GB	16276	# OVH - London
-51.195.0.0/16	DE	16276	# OVH - Frankfurt
-65.108.0.0/16	FI	24940	# Hetzner - Helsinki
-75.119.128.0/17	DE	51167	# Contabo - Munich
-136.243.0.0/16	DE	24940	# Hetzner - Falkenstein
-139.59.0.0/16	IN	14061	# DigitalOcean - Bangalore
-142.132.0.0/16	DE	24940	# Hetzner
-145.40.64.0/18	US	36352	# Latitude.sh - Dallas
-147.28.128.0/18	US	36352	# Latitude.sh - Chicago
-148.251.0.0/16	DE	24940	# Hetzner
-159.203.0.0/16	US	14061	# DigitalOcean - NYC
-176.9.0.0/16	DE	24940	# Hetzner
-202.8.8.0/24	JP	2914	# NTT - Tokyo
-202.8.9.0/24	SG	2914	# NTT - Singapore
-207.180.192.0/18	DE	51167	# Contabo
-209.145.48.0/20	US	8100	# QuadraNet
-213.239.192.0/18	DE	24940	# Hetzner
+# Bootstrap procedure:
+#   1. Snapshot `getClusterNodes` over a few epochs; collect gossip IPs.
+#   2. Resolve each /16 (or larger) supernet to ISO 3166-1 alpha-2 via
+#      MaxMind GeoLite2-Country (or db-ip.com Lite).
+#   3. Apply the rule above (country -> Zela region).
+#   4. Append rows here, sorted by start address. build.rs panics on overlap
+#      or unknown region label.
+
+24.144.64.0/19	NewYork		# DigitalOcean - NYC
+46.4.0.0/16	Frankfurt	# Hetzner - Falkenstein/Nuremberg
+51.81.0.0/16	NewYork		# OVH - Hillsboro
+51.89.0.0/16	Frankfurt	# OVH - London
+51.195.0.0/16	Frankfurt	# OVH - Frankfurt
+65.108.0.0/16	Frankfurt	# Hetzner - Helsinki
+75.119.128.0/17	Frankfurt	# Contabo - Munich
+136.243.0.0/16	Frankfurt	# Hetzner - Falkenstein
+139.59.0.0/16	Dubai		# DigitalOcean - Bangalore (S. Asia -> Dubai)
+142.132.0.0/16	Frankfurt	# Hetzner
+145.40.64.0/18	NewYork		# Latitude.sh - Dallas
+147.28.128.0/18	NewYork		# Latitude.sh - Chicago
+148.251.0.0/16	Frankfurt	# Hetzner
+159.203.0.0/16	NewYork		# DigitalOcean - NYC
+176.9.0.0/16	Frankfurt	# Hetzner
+202.8.8.0/24	Tokyo		# NTT - Tokyo
+202.8.9.0/24	Tokyo		# NTT - Singapore (SE Asia -> Tokyo)
+207.180.192.0/18	Frankfurt	# Contabo
+209.145.48.0/20	NewYork		# QuadraNet
+213.239.192.0/18	Frankfurt	# Hetzner

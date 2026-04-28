@@ -1,25 +1,30 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use zela_std::solana_sdk::clock::Slot;
 use zela_std::{CustomProcedure, RpcClient, RpcError, zela_custom_procedure};
 
-// mod geo;
+mod geo;
+
+use geo::ZelaRegion;
 
 pub struct HelloWorld;
+
+#[derive(Serialize, Deserialize)]
+pub struct Input {
+    pub empty: String,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Output {
     pub slot: Slot,
     pub leader: String,
-    pub leader_geo: String,
-    pub leader_asn: Option<u32>,
-    pub closest_region: String,
+    /// Closest Zela region to the current leader. `None` when the leader's IP
+    /// is not in the static geo table (treat as "unknown" client-side).
+    pub closest_region: Option<ZelaRegion>,
 }
 
-const UNKNOWN: &str = "unknown";
-
 impl CustomProcedure for HelloWorld {
-    type Params = ();
+    type Params = Input;
     type ErrorData = ();
     type SuccessData = Output;
 
@@ -30,27 +35,20 @@ impl CustomProcedure for HelloWorld {
         let current_slot = epoch_info.absolute_slot;
         let slot_index = epoch_info.slot_index as usize;
 
-        let leader = match rpc.get_leader_schedule(Some(current_slot)).await? {
-            Some(schedule) => schedule
-                .into_iter()
-                .find(|(_, offsets)| offsets.contains(&slot_index))
-                .map(|(pubkey, _)| pubkey),
-            None => None,
-        };
-
-        let leader = match leader {
-            Some(pk) => pk,
-            None => {
-                log::warn!("no leader found for slot_index={slot_index}");
-                return Ok(Output {
-                    slot: current_slot,
-                    leader: UNKNOWN.to_string(),
-                    leader_geo: UNKNOWN.to_string(),
-                    leader_asn: None,
-                    closest_region: UNKNOWN.to_string(),
-                });
-            }
-        };
+        let leader = rpc
+            .get_leader_schedule(Some(current_slot))
+            .await?
+            .and_then(|schedule| {
+                schedule
+                    .into_iter()
+                    .find(|(_, offsets)| offsets.contains(&slot_index))
+                    .map(|(pubkey, _)| pubkey)
+            })
+            .ok_or_else(|| RpcError {
+                code: 404,
+                message: format!("no leader scheduled for slot_index={slot_index}"),
+                data: None,
+            })?;
 
         let leader_ip = rpc
             .get_cluster_nodes()
@@ -60,32 +58,18 @@ impl CustomProcedure for HelloWorld {
             .and_then(|n| n.gossip.or(n.tpu).or(n.rpc))
             .map(|addr| addr.ip());
 
-        log::debug!("leader_ip={leader_ip:?}");
+        let closest_region = leader_ip.and_then(geo::lookup);
 
-        // let geo_entry = leader_ip.and_then(geo::lookup);
-        // let leader_geo = geo_entry.map(|g| g.country).unwrap_or(UNKNOWN);
-        // let closest_region = geo::country_to_region(leader_geo);
+        log::debug!(
+            "slot={current_slot} slot_index={slot_index} leader={leader} \
+             ip={leader_ip:?} region={closest_region:?}"
+        );
 
-        // log::debug!(
-        //     "slot={current_slot} slot_index={slot_index} leader={leader} ip={leader_ip:?} \
-        //      country={leader_geo} region={closest_region}"
-        // );
-
-        // Ok(Output {
-        //     slot: current_slot,
-        //     leader,
-        //     leader_geo: "leader_geo".to_string(),
-        //     leader_asn: geo_entry.map(|g| g.asn),
-        //     closest_region: closest_region.to_string(),
-        // })
-        //
-        return Ok(Output {
+        Ok(Output {
             slot: current_slot,
-            leader: UNKNOWN.to_string(),
-            leader_geo: UNKNOWN.to_string(),
-            leader_asn: None,
-            closest_region: UNKNOWN.to_string(),
-        });
+            leader,
+            closest_region,
+        })
     }
 
     const LOG_MAX_LEVEL: log::LevelFilter = log::LevelFilter::Debug;

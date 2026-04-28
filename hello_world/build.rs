@@ -4,16 +4,20 @@ use std::io::Write;
 use std::net::Ipv4Addr;
 use std::path::Path;
 
-/// Parses `data/ip_geo.tsv` into a sorted, non-overlapping `[(start_u32, end_u32, IpGeo)]`
-/// array literal in `$OUT_DIR/ip_geo.rs`. Sorting + overlap detection happens at build time
-/// so the runtime can binary-search without re-validation.
+/// Allowed Zela region labels. Mirror with `geo::ZelaRegion`.
+const ALLOWED_REGIONS: &[&str] = &["Frankfurt", "Dubai", "NewYork", "Tokyo"];
+
+/// Parses `data/ip_geo.tsv` into a sorted, non-overlapping `[(start, end, ZelaRegion)]`
+/// array literal in `$OUT_DIR/ip_geo.rs`. Sorting + overlap detection + region
+/// validation happen at build time so the runtime can binary-search without
+/// re-validation.
 fn main() {
     let dataset = "data/ip_geo.tsv";
     println!("cargo:rerun-if-changed={dataset}");
     println!("cargo:rerun-if-changed=build.rs");
 
     let raw = fs::read_to_string(dataset).expect("read data/ip_geo.tsv");
-    let mut ranges: Vec<(u32, u32, String, u32)> = Vec::new();
+    let mut ranges: Vec<(u32, u32, String)> = Vec::new();
 
     for (idx, line) in raw.lines().enumerate() {
         let lineno = idx + 1;
@@ -21,39 +25,37 @@ fn main() {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let cols: Vec<&str> = trimmed.split('\t').take(3).collect();
-        if cols.len() != 3 {
+        let cols: Vec<&str> = trimmed.split('\t').take(2).collect();
+        if cols.len() != 2 {
             panic!(
-                "{dataset}:{lineno}: expected at least 3 tab-separated fields (cidr, country, asn), got {}",
+                "{dataset}:{lineno}: expected at least 2 tab-separated fields (cidr, region), got {}",
                 cols.len()
             );
         }
         let (start, end) = parse_cidr(cols[0])
             .unwrap_or_else(|e| panic!("{dataset}:{lineno}: invalid CIDR {:?}: {e}", cols[0]));
-        let country = cols[1].to_string();
-        if country.len() != 2 {
+        let region = cols[1].trim().to_string();
+        if !ALLOWED_REGIONS.contains(&region.as_str()) {
             panic!(
-                "{dataset}:{lineno}: country must be ISO 3166-1 alpha-2, got {:?}",
-                country
+                "{dataset}:{lineno}: invalid region {:?} (allowed: {:?})",
+                region, ALLOWED_REGIONS
             );
         }
-        let asn: u32 = cols[2]
-            .parse()
-            .unwrap_or_else(|_| panic!("{dataset}:{lineno}: invalid ASN {:?}", cols[2]));
-        ranges.push((start, end, country, asn));
+        ranges.push((start, end, region));
     }
 
-    ranges.sort_by_key(|(start, _, _, _)| *start);
+    ranges.sort_by_key(|(start, _, _)| *start);
 
     for w in ranges.windows(2) {
-        let (a_start, a_end, _, _) = &w[0];
-        let (b_start, _, _, _) = &w[1];
+        let (a_start, a_end, _) = &w[0];
+        let (b_start, b_end, _) = &w[1];
         if b_start <= a_end {
             panic!(
-                "data/ip_geo.tsv: overlapping ranges {}..{} and {}..= : keep ranges disjoint",
+                "data/ip_geo.tsv: overlapping ranges {}..{} and {}..{} — keep ranges disjoint",
                 Ipv4Addr::from(*a_start),
                 Ipv4Addr::from(*a_end),
                 Ipv4Addr::from(*b_start),
+                Ipv4Addr::from(*b_end),
             );
         }
     }
@@ -69,13 +71,13 @@ fn main() {
     .unwrap();
     writeln!(
         out,
-        "pub static IP_GEO_RANGES: &[(u32, u32, IpGeo)] = &["
+        "pub static IP_GEO_RANGES: &[(u32, u32, ZelaRegion)] = &["
     )
     .unwrap();
-    for (start, end, country, asn) in &ranges {
+    for (start, end, region) in &ranges {
         writeln!(
             out,
-            "    ({start}u32, {end}u32, IpGeo {{ country: {country:?}, asn: {asn}u32 }}),"
+            "    ({start}u32, {end}u32, ZelaRegion::{region}),"
         )
         .unwrap();
     }
