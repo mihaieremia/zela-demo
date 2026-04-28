@@ -4,20 +4,30 @@ use std::io::Write;
 use std::net::Ipv4Addr;
 use std::path::Path;
 
-/// Allowed Zela region labels. Mirror with `geo::ZelaRegion`.
+/// Allowed `LeaderGeo` enum variants. Mirror with `geo::LeaderGeo`.
+const ALLOWED_LEADER_GEOS: &[&str] = &[
+    "Europe",
+    "Americas",
+    "Africa",
+    "MiddleEast",
+    "Asia",
+    "Oceania",
+];
+
+/// Allowed `ZelaRegion` enum variants. Mirror with `geo::ZelaRegion`.
 const ALLOWED_REGIONS: &[&str] = &["Frankfurt", "Dubai", "NewYork", "Tokyo"];
 
-/// Parses `data/ip_geo.tsv` into a sorted, non-overlapping `[(start, end, ZelaRegion)]`
-/// array literal in `$OUT_DIR/ip_geo.rs`. Sorting + overlap detection + region
-/// validation happen at build time so the runtime can binary-search without
-/// re-validation.
+/// Parses `data/ip_geo.tsv` into a sorted, non-overlapping
+/// `[(start, end, GeoEntry)]` array literal in `$OUT_DIR/ip_geo.rs`.
+/// Sorting + overlap detection + label validation happen at build time so
+/// the runtime can binary-search without re-validation.
 fn main() {
     let dataset = "data/ip_geo.tsv";
     println!("cargo:rerun-if-changed={dataset}");
     println!("cargo:rerun-if-changed=build.rs");
 
     let raw = fs::read_to_string(dataset).expect("read data/ip_geo.tsv");
-    let mut ranges: Vec<(u32, u32, String)> = Vec::new();
+    let mut ranges: Vec<(u32, u32, String, String)> = Vec::new();
 
     for (idx, line) in raw.lines().enumerate() {
         let lineno = idx + 1;
@@ -25,30 +35,43 @@ fn main() {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let cols: Vec<&str> = trimmed.split('\t').take(2).collect();
-        if cols.len() != 2 {
+        let cols: Vec<&str> = trimmed
+            .split('\t')
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && !s.starts_with('#'))
+            .take(3)
+            .collect();
+        if cols.len() != 3 {
             panic!(
-                "{dataset}:{lineno}: expected at least 2 tab-separated fields (cidr, region), got {}",
+                "{dataset}:{lineno}: expected at least 3 tab-separated fields \
+                 (cidr, leader_geo, region), got {}",
                 cols.len()
             );
         }
         let (start, end) = parse_cidr(cols[0])
             .unwrap_or_else(|e| panic!("{dataset}:{lineno}: invalid CIDR {:?}: {e}", cols[0]));
-        let region = cols[1].trim().to_string();
+        let leader_geo = cols[1].trim().to_string();
+        let region = cols[2].trim().to_string();
+        if !ALLOWED_LEADER_GEOS.contains(&leader_geo.as_str()) {
+            panic!(
+                "{dataset}:{lineno}: invalid leader_geo {:?} (allowed: {:?})",
+                leader_geo, ALLOWED_LEADER_GEOS
+            );
+        }
         if !ALLOWED_REGIONS.contains(&region.as_str()) {
             panic!(
                 "{dataset}:{lineno}: invalid region {:?} (allowed: {:?})",
                 region, ALLOWED_REGIONS
             );
         }
-        ranges.push((start, end, region));
+        ranges.push((start, end, leader_geo, region));
     }
 
-    ranges.sort_by_key(|(start, _, _)| *start);
+    ranges.sort_by_key(|(start, _, _, _)| *start);
 
     for w in ranges.windows(2) {
-        let (a_start, a_end, _) = &w[0];
-        let (b_start, b_end, _) = &w[1];
+        let (a_start, a_end, _, _) = &w[0];
+        let (b_start, b_end, _, _) = &w[1];
         if b_start <= a_end {
             panic!(
                 "data/ip_geo.tsv: overlapping ranges {}..{} and {}..{} — keep ranges disjoint",
@@ -71,13 +94,13 @@ fn main() {
     .unwrap();
     writeln!(
         out,
-        "pub static IP_GEO_RANGES: &[(u32, u32, ZelaRegion)] = &["
+        "pub static IP_GEO_RANGES: &[(u32, u32, GeoEntry)] = &["
     )
     .unwrap();
-    for (start, end, region) in &ranges {
+    for (start, end, leader_geo, region) in &ranges {
         writeln!(
             out,
-            "    ({start}u32, {end}u32, ZelaRegion::{region}),"
+            "    ({start}u32, {end}u32, GeoEntry {{ leader_geo: LeaderGeo::{leader_geo}, region: ZelaRegion::{region} }}),"
         )
         .unwrap();
     }

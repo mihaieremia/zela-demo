@@ -1,39 +1,93 @@
-# IPv4 CIDR -> Zela region mapping consumed by build.rs.
-# Columns (TAB-separated): cidr<TAB>region
-# region must be exactly one of: Frankfurt | Dubai | NewYork | Tokyo
+# IPv4 CIDR -> (leader_geo, Zela region) mapping consumed by build.rs.
+# Columns (TAB-separated): cidr<TAB>leader_geo<TAB>region
+# leader_geo ∈ { Europe | Americas | Africa | MiddleEast | Asia | Oceania }
+# region     ∈ { Frankfurt | Dubai | NewYork | Tokyo }
 #
-# Deterministic continental rule (apply offline at bootstrap, then encode the
-# result here — runtime never sees country codes):
-#   Americas (NA + SA) ............................ NewYork
-#   Europe + North/West Africa .................... Frankfurt
-#   Middle East + South Asia + East/South Africa .. Dubai
-#   East Asia + SE Asia + Oceania ................. Tokyo
+# Mapping rule (deterministic; encoded offline at bootstrap):
+#   Europe                        -> Frankfurt
+#   Africa (north/west)           -> Frankfurt
+#   Africa (east/south),
+#     MiddleEast, Asia (S. Asia)  -> Dubai
+#   Asia (East/SE), Oceania       -> Tokyo
+#   Americas                      -> NewYork
 #
-# Bootstrap procedure:
-#   1. Snapshot `getClusterNodes` over a few epochs; collect gossip IPs.
-#   2. Resolve each /16 (or larger) supernet to ISO 3166-1 alpha-2 via
-#      MaxMind GeoLite2-Country (or db-ip.com Lite).
-#   3. Apply the rule above (country -> Zela region).
-#   4. Append rows here, sorted by start address. build.rs panics on overlap
-#      or unknown region label.
+# The four hosters below are explicitly seeded (~50%+ of mainnet validators
+# per public peeringdb / RIR data, 2025-Q1):
+#   * OVHcloud         (AS16276)
+#   * Latitude.sh      (AS137409 + AS54825 Equinix Metal cross-presence)
+#   * TeraSwitch       (AS396998)
+#   * Cherry Servers   (AS16125)
+#
+# Plus opportunistic Hetzner / Contabo / DigitalOcean / NTT / RIPE blocks.
+# build.rs panics on overlap or unknown label.
 
-24.144.64.0/19	NewYork		# DigitalOcean - NYC
-46.4.0.0/16	Frankfurt	# Hetzner - Falkenstein/Nuremberg
-51.81.0.0/16	NewYork		# OVH - Hillsboro
-51.89.0.0/16	Frankfurt	# OVH - London
-51.195.0.0/16	Frankfurt	# OVH - Frankfurt
-65.108.0.0/16	Frankfurt	# Hetzner - Helsinki
-75.119.128.0/17	Frankfurt	# Contabo - Munich
-136.243.0.0/16	Frankfurt	# Hetzner - Falkenstein
-139.59.0.0/16	Dubai		# DigitalOcean - Bangalore (S. Asia -> Dubai)
-142.132.0.0/16	Frankfurt	# Hetzner
-145.40.64.0/18	NewYork		# Latitude.sh - Dallas
-147.28.128.0/18	NewYork		# Latitude.sh - Chicago
-148.251.0.0/16	Frankfurt	# Hetzner
-159.203.0.0/16	NewYork		# DigitalOcean - NYC
-176.9.0.0/16	Frankfurt	# Hetzner
-202.8.8.0/24	Tokyo		# NTT - Tokyo
-202.8.9.0/24	Tokyo		# NTT - Singapore (SE Asia -> Tokyo)
-207.180.192.0/18	Frankfurt	# Contabo
-209.145.48.0/20	NewYork		# QuadraNet
-213.239.192.0/18	Frankfurt	# Hetzner
+# --- Hetzner / Contabo / DigitalOcean / Cogent / Lumen / NTT / RIPE EU ---
+5.9.0.0/16	Europe		Frankfurt	# Hetzner - DE
+24.144.64.0/19	Americas	NewYork		# DigitalOcean - NYC
+38.102.0.0/16	Americas	NewYork		# Cogent - US
+38.146.0.0/16	Americas	NewYork		# TeraSwitch - US (AS396998)
+46.4.0.0/16	Europe		Frankfurt	# Hetzner - Falkenstein/Nuremberg
+63.254.0.0/16	Americas	NewYork		# Lumen/CenturyLink - US
+64.130.32.0/19	Americas	NewYork		# TeraSwitch - US (AS396998)
+65.108.0.0/16	Europe		Frankfurt	# Hetzner - Helsinki
+75.119.128.0/17	Europe		Frankfurt	# Contabo - Munich
+86.54.0.0/16	Europe		Frankfurt	# RIPE EU
+88.198.0.0/16	Europe		Frankfurt	# Hetzner - DE
+94.130.0.0/16	Europe		Frankfurt	# Hetzner - DE
+95.216.0.0/16	Europe		Frankfurt	# Hetzner - FI
+136.243.0.0/16	Europe		Frankfurt	# Hetzner - Falkenstein
+139.59.0.0/16	Asia		Dubai		# DigitalOcean - Bangalore (S. Asia)
+142.132.0.0/16	Europe		Frankfurt	# Hetzner
+148.251.0.0/16	Europe		Frankfurt	# Hetzner
+154.41.0.0/16	Americas	NewYork		# TeraSwitch - US (AS396998)
+159.203.0.0/16	Americas	NewYork		# DigitalOcean - NYC
+167.235.0.0/16	Europe		Frankfurt	# Hetzner - DE
+176.9.0.0/16	Europe		Frankfurt	# Hetzner
+185.26.0.0/16	Europe		Frankfurt	# RIPE EU
+185.142.0.0/16	Europe		Frankfurt	# RIPE EU
+185.181.0.0/16	Europe		Frankfurt	# RIPE EU
+185.209.0.0/16	Europe		Frankfurt	# RIPE EU
+185.245.0.0/16	Europe		Frankfurt	# RIPE EU
+202.8.8.0/24	Asia		Tokyo		# NTT - Tokyo
+202.8.9.0/24	Asia		Tokyo		# NTT - Singapore (SE Asia)
+207.180.192.0/18	Europe		Frankfurt	# Contabo
+209.145.48.0/20	Americas	NewYork		# QuadraNet
+213.239.192.0/18	Europe		Frankfurt	# Hetzner
+
+# --- OVHcloud (AS16276) ---
+5.39.0.0/17	Europe		Frankfurt	# OVH - FR
+51.38.0.0/16	Europe		Frankfurt	# OVH - FR
+51.68.0.0/16	Europe		Frankfurt	# OVH - FR
+51.75.0.0/16	Europe		Frankfurt	# OVH - FR
+51.79.0.0/16	Asia		Tokyo		# OVH - SG/SYD
+51.81.0.0/16	Americas	NewYork		# OVH - Hillsboro/Vint Hill
+51.83.0.0/16	Europe		Frankfurt	# OVH - PL/EU
+51.89.0.0/16	Europe		Frankfurt	# OVH - GB London (close to FRA)
+51.91.0.0/16	Europe		Frankfurt	# OVH - FR
+51.195.0.0/16	Europe		Frankfurt	# OVH - DE Frankfurt
+51.222.0.0/16	Americas	NewYork		# OVH - CA Beauharnois
+91.121.0.0/16	Europe		Frankfurt	# OVH - FR
+92.222.0.0/16	Europe		Frankfurt	# OVH - FR
+139.99.0.0/16	Asia		Tokyo		# OVH - SG/SYD
+142.44.128.0/17	Americas	NewYork		# OVH - CA
+144.217.0.0/16	Americas	NewYork		# OVH - CA Beauharnois
+158.69.0.0/16	Americas	NewYork		# OVH - CA Beauharnois
+167.114.0.0/16	Americas	NewYork		# OVH - CA Beauharnois
+178.32.0.0/16	Europe		Frankfurt	# OVH - FR
+188.165.0.0/16	Europe		Frankfurt	# OVH - FR
+192.99.0.0/16	Americas	NewYork		# OVH - CA
+198.27.64.0/18	Americas	NewYork		# OVH - CA
+198.50.128.0/17	Americas	NewYork		# OVH - CA
+213.32.0.0/16	Europe		Frankfurt	# OVH - FR
+
+# --- Latitude.sh + Equinix Metal (AS137409 / AS54825) ---
+86.109.0.0/16	Americas	NewYork		# Latitude.sh / Equinix Metal - US
+137.66.0.0/16	Americas	NewYork		# Latitude.sh - US
+145.40.64.0/18	Americas	NewYork		# Latitude.sh - Dallas
+147.28.128.0/18	Americas	NewYork		# Latitude.sh - Chicago
+147.75.0.0/16	Americas	NewYork		# Equinix Metal - US dominant
+
+# --- Cherry Servers (AS16125) ---
+5.199.128.0/17	Europe		Frankfurt	# Cherry Servers - LT/EU
+178.16.144.0/21	Europe		Frankfurt	# Cherry Servers - LT
+188.127.224.0/19	Europe		Frankfurt	# Cherry Servers - LT
